@@ -2,7 +2,7 @@
 
 > **Enter your budget. We find the world.**
 
-WanderWise is a travel discovery app that takes your total budget and finds real flight + hotel combinations that fit — no guessing, no manual searching across multiple sites.
+WanderWise is a travel discovery app that takes your total budget and finds real flight + hotel combinations that fit, no guessing, no manual searching across multiple sites.
 
 ---
 
@@ -10,7 +10,7 @@ WanderWise is a travel discovery app that takes your total budget and finds real
 
 **This is a front-end demo running on mock data.**
 
-The app is fully functional in terms of UI, logic, and budget filtering — but the flight and hotel results you see are **simulated**, not pulled from a live travel API.
+The app is fully functional in terms of UI, logic, and budget filtering, but the flight and hotel results you see are **simulated**, not pulled from a live travel API.
 
 ### Why?
 

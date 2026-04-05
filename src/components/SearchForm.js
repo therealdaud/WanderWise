@@ -60,7 +60,7 @@ function SearchForm({ onSearch, isLoading }) {
         <div className="sentence-divider">·</div>
 
         <div className="sentence-chunk">
-          <span className="sentence-label">💰 budget</span>
+          <span className="sentence-label"><span role="img" aria-label="money bag">💰</span> budget</span>
           <div className="budget-wrap">
             <span className="currency-sign">$</span>
             <input

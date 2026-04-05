@@ -8,7 +8,7 @@ export default function ResultsList({ results }) {
     return (
       <section className="results-section">
         <div className="no-results">
-          <p className="no-results-icon">🔭</p>
+          <p className="no-results-icon"><span role="img" aria-label="telescope">🔭</span></p>
           <p className="no-results-title">No trips found within your budget</p>
           <p className="no-results-sub">
             Try raising your budget, choosing a closer destination,<br />

@@ -47,7 +47,7 @@ export default function TripCard({ trip }) {
 
         {/* Flight */}
         <div className="tc-section">
-          <p className="tc-section-title">✈ Flight</p>
+          <p className="tc-section-title"><span role="img" aria-label="airplane">✈</span> Flight</p>
           <div className="tc-row">
             <span className="tc-airline">{trip.flight.airline}</span>
             <span className="tc-price">${trip.flight.price}</span>
@@ -68,7 +68,7 @@ export default function TripCard({ trip }) {
 
         {/* Hotel */}
         <div className="tc-section">
-          <p className="tc-section-title">🏨 Hotel</p>
+          <p className="tc-section-title"><span role="img" aria-label="hotel">🏨</span> Hotel</p>
 
           {options.length > 1 && (
             <div className="tc-tabs">

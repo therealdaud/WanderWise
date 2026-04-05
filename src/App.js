@@ -54,7 +54,7 @@ function App() {
       {isLoading && (
         <div className="status-section">
           <div className="status-card">
-            <div className="globe-spinner">🌐</div>
+            <div className="globe-spinner"><span role="img" aria-label="globe">🌐</span></div>
             <p className="status-msg">{progress}</p>
           </div>
         </div>
@@ -64,7 +64,7 @@ function App() {
       {error && (
         <div className="status-section">
           <div className="error-card">
-            <span>⚠️</span>
+            <span role="img" aria-label="warning">⚠️</span>
             <p>{error}</p>
           </div>
         </div>

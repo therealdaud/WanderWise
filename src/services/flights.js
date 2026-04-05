@@ -23,10 +23,14 @@ export async function resolveAirport(query) {
     throw new Error(`Could not resolve an airport for "${query}". Please try a different input.`);
   }
 
+  // city-level suggestions have city_name: null — fall back to nested airports[0]
+  const cityName    = place.city_name ?? place.airports?.[0]?.city_name ?? query;
+  const countryCode = place.iata_country_code ?? place.airports?.[0]?.iata_country_code ?? '';
+
   return {
     iataCode:    place.iata_code,
-    cityName:    place.city_name ?? place.name ?? query,
-    countryName: place.country_name ?? '',
+    cityName,
+    countryName: countryCode,
   };
 }
 

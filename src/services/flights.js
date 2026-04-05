@@ -1,99 +1,88 @@
-// src/services/flights.js  —  Air Scraper API (sky-scrapper.p.rapidapi.com)
+// src/services/flights.js  —  Duffel API (via /api/flights Vercel function)
 
 import axios from 'axios';
-import { BASE_URL, apiHeaders } from './api';
-import { withRetry } from '../utils/rateLimit';
 
 /**
- * Resolve any free-text input (IATA code, city name, airport name) to a
- * structured airport object: { skyId, entityId, cityName, countryName }
+ * Resolve any free-text input (city name, IATA code) to an airport object.
+ * Returns: { iataCode, cityName, countryName }
  */
 export async function resolveAirport(query) {
-  const res = await withRetry(() =>
-    axios.get(`${BASE_URL}/api/v1/flights/searchAirport`, {
-      params:  { query: query.trim(), locale: 'en-US' },
-      headers: apiHeaders(),
-    })
-  );
+  const res = await axios.get('/api/airports', {
+    params: { query: query.trim() },
+  });
 
-  const data = res.data?.data;
-  if (!data || data.length === 0) {
+  const suggestions = res.data?.data;
+  if (!suggestions || suggestions.length === 0) {
     throw new Error(`No airport found for "${query}". Try a city name or IATA code.`);
   }
 
-  const airport  = data[0];
-  const skyId    = airport.skyId    || airport.navigation?.relevantFlightParams?.skyId;
-  const entityId = airport.entityId || airport.navigation?.entityId;
+  // Prefer a result with an IATA code (airports) over generic places
+  const place = suggestions.find(s => s.iata_code) ?? suggestions[0];
 
-  if (!skyId || !entityId) {
-    throw new Error(`Could not resolve airport for "${query}". Please try a different input.`);
+  if (!place.iata_code) {
+    throw new Error(`Could not resolve an airport for "${query}". Please try a different input.`);
   }
 
   return {
-    skyId,
-    entityId,
-    cityName:    airport.presentation?.title    || query,
-    countryName: airport.presentation?.subtitle || '',
+    iataCode:    place.iata_code,
+    cityName:    place.city_name ?? place.name ?? query,
+    countryName: place.country_name ?? '',
   };
 }
 
 /**
- * Search for round-trip flights between two resolved airports on given dates.
- * Returns the raw array of itineraries.
+ * Search for round-trip flights between two IATA codes on given dates.
+ * Returns the raw Duffel offers array.
  */
-export async function searchFlights({
-  originSkyId,
-  destinationSkyId,
-  originEntityId,
-  destinationEntityId,
-  departureDate,
-  returnDate,
-}) {
-  const res = await withRetry(() =>
-    axios.get(`${BASE_URL}/api/v1/flights/searchFlights`, {
-      params: {
-        originSkyId,
-        destinationSkyId,
-        originEntityId,
-        destinationEntityId,
-        date:        departureDate,
-        returnDate,
-        cabinClass:  'economy',
-        adults:       1,
-        sortBy:      'cheapest',
-        currency:    'USD',
-        market:      'en-US',
-        countryCode: 'US',
-      },
-      headers: apiHeaders(),
-    })
-  );
+export async function searchFlights({ originIata, destinationIata, departureDate, returnDate }) {
+  const res = await axios.post('/api/flights', {
+    origin:        originIata,
+    destination:   destinationIata,
+    departureDate,
+    returnDate,
+  });
 
-  return res.data?.data?.itineraries || [];
+  return res.data?.data?.offers ?? [];
 }
 
 /**
- * Extract the cheapest itinerary and return a normalised flight object.
+ * Parse an ISO 8601 duration string (e.g. "PT2H30M") to total minutes.
  */
-export function getCheapestFlight(itineraries) {
-  if (!itineraries || itineraries.length === 0) return null;
+function parseDurationMins(iso) {
+  if (!iso) return 0;
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  return parseInt(match?.[1] ?? 0) * 60 + parseInt(match?.[2] ?? 0);
+}
 
-  const sorted = [...itineraries].sort(
-    (a, b) => (a.price?.raw ?? Infinity) - (b.price?.raw ?? Infinity)
+/**
+ * Extract the cheapest Duffel offer and return a normalised flight object.
+ */
+export function getCheapestFlight(offers) {
+  if (!offers || offers.length === 0) return null;
+
+  const sorted = [...offers].sort(
+    (a, b) => parseFloat(a.total_amount ?? Infinity) - parseFloat(b.total_amount ?? Infinity)
   );
+
   const best      = sorted[0];
-  const outbound  = best.legs?.[0];
-  const returnLeg = best.legs?.[1];
+  const outbound  = best.slices?.[0];
+  const returnLeg = best.slices?.[1];
+  const outSeg    = outbound?.segments?.[0];
+  const retSeg    = returnLeg?.segments?.[0];
+  const stops     = Math.max(0, (outbound?.segments?.length ?? 1) - 1);
+  const price     = parseFloat(best.total_amount ?? 0);
 
   return {
-    price:           best.price?.raw       ?? 0,
-    priceFormatted:  best.price?.formatted ?? `$${best.price?.raw ?? 0}`,
-    airline:         outbound?.carriers?.marketing?.[0]?.name ?? 'Unknown Airline',
-    stops:           outbound?.stopCount         ?? 0,
-    durationMins:    outbound?.durationInMinutes ?? 0,
-    departure:       outbound?.departure  ?? null,
-    arrival:         outbound?.arrival    ?? null,
-    returnDeparture: returnLeg?.departure ?? null,
-    returnArrival:   returnLeg?.arrival   ?? null,
+    price,
+    priceFormatted:  `$${price.toFixed(0)}`,
+    airline:         outSeg?.marketing_carrier?.name
+                  ?? outSeg?.operating_carrier?.name
+                  ?? 'Unknown Airline',
+    stops,
+    durationMins:    parseDurationMins(outbound?.duration),
+    departure:       outSeg?.departing_at  ?? null,
+    arrival:         outSeg?.arriving_at   ?? null,
+    returnDeparture: retSeg?.departing_at  ?? null,
+    returnArrival:   retSeg?.arriving_at   ?? null,
   };
 }

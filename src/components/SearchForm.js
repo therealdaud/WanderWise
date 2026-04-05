@@ -2,33 +2,54 @@
 
 import React, { useState } from 'react';
 
-function SearchForm({ onSearch, isLoading, recentSearches = [] }) {
-  const [origin,       setOrigin]       = useState('');
-  const [destination,  setDestination]  = useState('');
-  const [budget,       setBudget]       = useState('');
+const MOODS = [
+  { key: 'relax',     label: 'Relax',     icon: '🌴' },
+  { key: 'adventure', label: 'Adventure', icon: '🏔️' },
+  { key: 'party',     label: 'Party',     icon: '🎉' },
+  { key: 'culture',   label: 'Culture',   icon: '🎨' },
+  { key: 'food',      label: 'Food',      icon: '🍜' },
+  { key: 'nature',    label: 'Nature',    icon: '🌿' },
+];
+
+function SearchForm({ onSearch, onSurprise, isLoading, recentSearches = [], defaultValues = {} }) {
+  const [origin,       setOrigin]       = useState(defaultValues.origin       || '');
+  const [destination,  setDestination]  = useState(defaultValues.destination  || '');
+  const [budget,       setBudget]       = useState(defaultValues.budget       || '');
   const [checkinDate,  setCheckinDate]  = useState('');
   const [checkoutDate, setCheckoutDate] = useState('');
   const [showDates,    setShowDates]    = useState(false);
+  const [mood,         setMood]         = useState(defaultValues.mood         || '');
 
   const today = new Date().toISOString().split('T')[0];
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!origin.trim() || !budget) return;
+  const buildParams = () => {
     const useDates = showDates && checkinDate && checkoutDate;
-    onSearch({
+    return {
       origin:       origin.trim(),
       destination:  destination.trim(),
       budget:       parseFloat(budget),
       checkinDate:  useDates ? checkinDate  : null,
       checkoutDate: useDates ? checkoutDate : null,
-    });
+      mood,
+    };
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!origin.trim() || !budget) return;
+    onSearch(buildParams());
+  };
+
+  const handleSurprise = () => {
+    if (!origin.trim() || !budget) return;
+    onSurprise(buildParams());
   };
 
   const fillRecent = (params) => {
     setOrigin(params.origin);
     setDestination(params.destination || '');
     setBudget(String(params.budget));
+    if (params.mood) setMood(params.mood);
   };
 
   return (
@@ -37,7 +58,9 @@ function SearchForm({ onSearch, isLoading, recentSearches = [] }) {
       {/* ── Sentence-style row ── */}
       <div className="sentence-row">
         <div className="sentence-chunk">
-          <span className="sentence-label">✈ flying from</span>
+          <span className="sentence-label">
+            <span role="img" aria-label="plane">✈</span> flying from
+          </span>
           <input
             className="sentence-input"
             type="text"
@@ -85,6 +108,25 @@ function SearchForm({ onSearch, isLoading, recentSearches = [] }) {
         </div>
       </div>
 
+      {/* ── Mood selector ── */}
+      <div className="mood-row">
+        <span className="mood-label">trip vibe</span>
+        <div className="mood-chips">
+          {MOODS.map(m => (
+            <button
+              key={m.key}
+              type="button"
+              className={`mood-chip ${mood === m.key ? 'mood-chip--active' : ''}`}
+              onClick={() => setMood(mood === m.key ? '' : m.key)}
+              disabled={isLoading}
+            >
+              <span role="img" aria-label={m.label}>{m.icon}</span>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ── Dates toggle ── */}
       <div className="dates-area">
         <button
@@ -125,14 +167,28 @@ function SearchForm({ onSearch, isLoading, recentSearches = [] }) {
         )}
       </div>
 
-      {/* ── Submit ── */}
-      <button type="submit" className="go-btn" disabled={isLoading}>
-        {isLoading ? (
-          <span className="btn-inner">searching<span className="dots"><span>.</span><span>.</span><span>.</span></span></span>
-        ) : (
-          <span className="btn-inner">find my trip <span className="btn-arrow">→</span></span>
-        )}
-      </button>
+      {/* ── Action buttons ── */}
+      <div className="form-actions">
+        <button type="submit" className="go-btn" disabled={isLoading}>
+          {isLoading ? (
+            <span className="btn-inner">
+              searching<span className="dots"><span>.</span><span>.</span><span>.</span></span>
+            </span>
+          ) : (
+            <span className="btn-inner">find my trip <span className="btn-arrow">→</span></span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className="surprise-btn"
+          onClick={handleSurprise}
+          disabled={isLoading || !origin.trim() || !budget}
+          title="Let WanderWise pick the perfect trip for you"
+        >
+          <span role="img" aria-label="sparkles">✨</span> Surprise Me
+        </button>
+      </div>
 
       <p className="form-hint">
         Leave destination blank to discover trips within your budget

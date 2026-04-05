@@ -12,11 +12,27 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Convert ISO 3166-1 alpha-2 code → flag emoji (e.g. "US" → 🇺🇸) */
+/** ISO 3166-1 alpha-2 → flag emoji */
 function countryFlag(code) {
   if (!code || code.length < 2) return '';
   return code.toUpperCase().slice(0, 2)
     .replace(/[A-Z]/g, c => String.fromCodePoint(c.charCodeAt(0) + 127397));
+}
+
+/** Days until departure (negative = past) */
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dep   = new Date(dateStr); dep.setHours(0, 0, 0, 0);
+  return Math.round((dep - today) / 86_400_000);
+}
+
+/** City-seeded gradient for card header */
+function cityGradient(city = '') {
+  const seed  = city.toLowerCase().split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const hue1  = (seed * 47) % 360;
+  const hue2  = (hue1 + 45) % 360;
+  return `linear-gradient(135deg, hsl(${hue1},55%,12%) 0%, hsl(${hue2},65%,22%) 100%)`;
 }
 
 function Stars({ n }) {
@@ -30,8 +46,7 @@ function Stars({ n }) {
 }
 
 /**
- * WanderScore: 0–100 composite of hotel quality, value for money, flight quality.
- * Higher = better overall trip.
+ * WanderScore: 0–99 composite.
  */
 function calcWanderScore(trip, hotel) {
   const hotelScore  = Math.round((Math.min(10, hotel.rating ?? 0) / 10) * 35);
@@ -41,10 +56,38 @@ function calcWanderScore(trip, hotel) {
   return Math.min(99, Math.max(1, hotelScore + valueScore + stopScore));
 }
 
+/** Trip DNA: 5 dimensions, each 0–100 */
+function calcDNA(trip, hotel) {
+  const flightQ  = trip.flight.stops === 0 ? 100 : trip.flight.stops === 1 ? 60 : 25;
+  const hotelQ   = Math.round((Math.min(10, hotel.rating ?? 0) / 10) * 100);
+  const totalB   = trip.totalCost + Math.max(0, trip.budgetRemaining);
+  const value    = Math.round((Math.max(0, trip.budgetRemaining) / totalB) * 100);
+  // Popularity: seeded from destination name
+  const seed     = trip.destination.toLowerCase().split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const popular  = 40 + (seed % 61);
+  // Season: seeded from destination + departure month
+  const month    = trip.dates.departure ? new Date(trip.dates.departure).getMonth() : 6;
+  const season   = 45 + ((seed + month * 13) % 56);
+  return [
+    { label: 'Flight',  val: flightQ,  color: '#60a5fa' },
+    { label: 'Hotel',   val: hotelQ,   color: '#a78bfa' },
+    { label: 'Value',   val: value,    color: '#4ade80' },
+    { label: 'Popular', val: popular,  color: '#f59e0b' },
+    { label: 'Season',  val: season,   color: '#fb7185' },
+  ];
+}
+
 /* ── Component ───────────────────────────────────────────────────────────── */
-export default function TripCard({ trip, index = 0, isBestDeal = false }) {
-  const [hotelIdx,  setHotelIdx]  = useState(0);
-  const [copied,    setCopied]    = useState(false);
+export default function TripCard({
+  trip,
+  index = 0,
+  isBestDeal = false,
+  isComparing = false,
+  onToggleCompare,
+}) {
+  const [hotelIdx, setHotelIdx] = useState(0);
+  const [copied,   setCopied]   = useState(false);
+  const [dnaOpen,  setDnaOpen]  = useState(false);
 
   const options   = trip.allAffordableHotels ?? [trip.hotel];
   const hotel     = options[hotelIdx] ?? trip.hotel;
@@ -52,7 +95,10 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
   const remaining = trip.budgetRemaining + (trip.hotel.totalPrice - hotel.totalPrice);
   const pctUsed   = Math.min(100, Math.round((total / (total + Math.max(0, remaining))) * 100));
   const score     = calcWanderScore(trip, hotel);
+  const dna       = calcDNA(trip, hotel);
   const flag      = countryFlag(trip.country);
+  const days      = daysUntil(trip.dates.departure);
+  const gradient  = cityGradient(trip.destination);
 
   const handleShare = () => {
     const text =
@@ -68,7 +114,7 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
 
   return (
     <article
-      className="tc"
+      className={`tc ${isComparing ? 'tc--comparing' : ''}`}
       style={{ animationDelay: `${index * 0.07}s` }}
     >
       {/* ── Best Deal banner ── */}
@@ -78,14 +124,23 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
         </div>
       )}
 
-      {/* ── Header ── */}
-      <div className="tc-header">
+      {/* ── Gradient city header ── */}
+      <div className="tc-header" style={{ background: gradient }}>
         <div>
           <h3 className="tc-dest">
             {flag && <span className="tc-flag" role="img" aria-label={trip.country}>{flag}</span>}
             {trip.destination}
           </h3>
           <span className="tc-country">{trip.country}</span>
+          {days !== null && (
+            <span className={`tc-countdown ${days <= 7 ? 'tc-countdown--soon' : ''}`}>
+              {days === 0
+                ? '🔥 Departing today!'
+                : days < 0
+                  ? `Departed ${Math.abs(days)}d ago`
+                  : `Departing in ${days} day${days !== 1 ? 's' : ''}`}
+            </span>
+          )}
         </div>
 
         <div className="tc-header-right">
@@ -106,7 +161,9 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
 
         {/* Flight */}
         <div className="tc-section">
-          <p className="tc-section-title"><span role="img" aria-label="airplane">✈</span> Flight</p>
+          <p className="tc-section-title">
+            <span role="img" aria-label="airplane">✈</span> Flight
+          </p>
           <div className="tc-row">
             <span className="tc-airline">{trip.flight.airline}</span>
             <span className="tc-price">${trip.flight.price.toFixed(0)}</span>
@@ -118,7 +175,7 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
           </div>
           {trip.flight.returnDeparture && (
             <div className="tc-sub tc-return">
-              ↩ Return: {fmtTime(trip.flight.returnDeparture)} → {fmtTime(trip.flight.returnArrival)}
+              <span role="img" aria-label="return">↩</span> Return: {fmtTime(trip.flight.returnDeparture)} → {fmtTime(trip.flight.returnArrival)}
             </div>
           )}
         </div>
@@ -127,7 +184,9 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
 
         {/* Hotel */}
         <div className="tc-section">
-          <p className="tc-section-title"><span role="img" aria-label="hotel">🏨</span> Hotel</p>
+          <p className="tc-section-title">
+            <span role="img" aria-label="hotel">🏨</span> Hotel
+          </p>
 
           {options.length > 1 && (
             <div className="tc-tabs">
@@ -154,6 +213,36 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
             )}
           </div>
         </div>
+
+        <div className="tc-divider" />
+
+        {/* ── Trip DNA ── */}
+        <div className="tc-dna-row">
+          <button
+            className="tc-dna-toggle"
+            onClick={() => setDnaOpen(o => !o)}
+            type="button"
+          >
+            Trip DNA {dnaOpen ? '▲' : '▼'}
+          </button>
+
+          {dnaOpen && (
+            <div className="tc-dna">
+              {dna.map(d => (
+                <div key={d.label} className="tc-dna-item">
+                  <span className="tc-dna-label">{d.label}</span>
+                  <div className="tc-dna-bar-track">
+                    <div
+                      className="tc-dna-bar-fill"
+                      style={{ width: `${d.val}%`, background: d.color }}
+                    />
+                  </div>
+                  <span className="tc-dna-val">{d.val}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Footer ── */}
@@ -164,18 +253,34 @@ export default function TripCard({ trip, index = 0, isBestDeal = false }) {
           <span className={`tc-remaining ${remaining >= 0 ? 'tc-remaining--ok' : 'tc-remaining--over'}`}>
             {remaining >= 0 ? `$${remaining.toFixed(0)} left` : `$${Math.abs(remaining).toFixed(0)} over`}
           </span>
-          <button
-            className={`tc-share-btn ${copied ? 'tc-share-btn--copied' : ''}`}
-            onClick={handleShare}
-            title="Copy trip summary"
-          >
-            {copied ? '✓ copied' : '⎘ share'}
-          </button>
         </div>
 
         {/* Budget bar */}
         <div className="tc-bar-track">
           <div className="tc-bar-fill" style={{ width: `${pctUsed}%` }} />
+        </div>
+
+        {/* Action row */}
+        <div className="tc-actions">
+          <button
+            className={`tc-share-btn ${copied ? 'tc-share-btn--copied' : ''}`}
+            onClick={handleShare}
+            title="Copy trip summary"
+            type="button"
+          >
+            {copied ? '✓ copied' : '⎘ share'}
+          </button>
+
+          {onToggleCompare && (
+            <button
+              className={`tc-compare-btn ${isComparing ? 'tc-compare-btn--active' : ''}`}
+              onClick={() => onToggleCompare(trip.id)}
+              title={isComparing ? 'Remove from comparison' : 'Add to comparison'}
+              type="button"
+            >
+              {isComparing ? '✕ comparing' : '+ compare'}
+            </button>
+          )}
         </div>
       </div>
 

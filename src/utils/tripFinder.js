@@ -18,6 +18,15 @@ const POPULAR_DESTINATIONS = [
   'Chicago', 'Cancun', 'London', 'Paris', 'Tokyo',
 ];
 
+const MOOD_DESTINATIONS = {
+  relax:     ['Cancun', 'Miami', 'Orlando', 'Los Angeles', 'Nashville'],
+  adventure: ['Denver', 'Seattle', 'Chicago', 'New York', 'Portland'],
+  party:     ['Las Vegas', 'Miami', 'New York', 'New Orleans', 'Chicago'],
+  culture:   ['New York', 'Chicago', 'London', 'Paris', 'Tokyo'],
+  food:      ['New York', 'Chicago', 'New Orleans', 'Los Angeles', 'Tokyo'],
+  nature:    ['Denver', 'Seattle', 'Portland', 'Nashville', 'Orlando'],
+};
+
 async function searchDestination({ originAirport, destName, budget, dateWindows, onProgress, tag }) {
   let destAirport, hotelDest;
 
@@ -61,7 +70,6 @@ async function searchDestination({ originAirport, destName, budget, dateWindows,
 
       if (hotels.length === 0) continue;
 
-      // Track cheapest possible trip for this route regardless of budget
       const cheapestPossible = cheapestFlight.price + hotels[0].totalPrice;
       if (minCostSeen === null || cheapestPossible < minCostSeen) {
         minCostSeen = cheapestPossible;
@@ -103,7 +111,7 @@ async function searchDestination({ originAirport, destName, budget, dateWindows,
 }
 
 export async function findTrips(
-  { origin, destination, budget, checkinDate, checkoutDate },
+  { origin, destination, budget, checkinDate, checkoutDate, mood },
   onProgress = () => {}
 ) {
   onProgress('Resolving your departure airport…');
@@ -145,7 +153,10 @@ export async function findTrips(
     globalMinCost = minCostSeen;
   } else {
     const originCity   = originAirport.cityName.toLowerCase();
-    const destinations = POPULAR_DESTINATIONS.filter(
+
+    // Use mood-specific destinations if a mood is provided, otherwise popular list
+    const moodList     = (mood && MOOD_DESTINATIONS[mood]) ? MOOD_DESTINATIONS[mood] : POPULAR_DESTINATIONS;
+    const destinations = moodList.filter(
       d => !d.toLowerCase().includes(originCity) && !originCity.includes(d.toLowerCase())
     );
 
@@ -164,7 +175,7 @@ export async function findTrips(
   }
 
   return {
-    trips:         allResults.sort((a, b) => a.totalCost - b.totalCost),
-    minCostFound:  globalMinCost,
+    trips:        allResults.sort((a, b) => a.totalCost - b.totalCost),
+    minCostFound: globalMinCost,
   };
 }

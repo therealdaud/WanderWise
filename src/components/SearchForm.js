@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 
-function SearchForm({ onSearch, isLoading }) {
+function SearchForm({ onSearch, isLoading, recentSearches = [] }) {
   const [origin,       setOrigin]       = useState('');
   const [destination,  setDestination]  = useState('');
   const [budget,       setBudget]       = useState('');
@@ -23,6 +23,12 @@ function SearchForm({ onSearch, isLoading }) {
       checkinDate:  useDates ? checkinDate  : null,
       checkoutDate: useDates ? checkoutDate : null,
     });
+  };
+
+  const fillRecent = (params) => {
+    setOrigin(params.origin);
+    setDestination(params.destination || '');
+    setBudget(String(params.budget));
   };
 
   return (
@@ -60,7 +66,9 @@ function SearchForm({ onSearch, isLoading }) {
         <div className="sentence-divider">·</div>
 
         <div className="sentence-chunk">
-          <span className="sentence-label"><span role="img" aria-label="money bag">💰</span> budget</span>
+          <span className="sentence-label">
+            <span role="img" aria-label="money bag">💰</span> budget
+          </span>
           <div className="budget-wrap">
             <span className="currency-sign">$</span>
             <input
@@ -129,6 +137,24 @@ function SearchForm({ onSearch, isLoading }) {
       <p className="form-hint">
         Leave destination blank to discover trips within your budget
       </p>
+
+      {/* ── Recent searches ── */}
+      {recentSearches.length > 0 && !isLoading && (
+        <div className="recent-searches">
+          <span className="recent-label">recent</span>
+          {recentSearches.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              className="recent-chip"
+              onClick={() => fillRecent(r.params)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
+
     </form>
   );
 }

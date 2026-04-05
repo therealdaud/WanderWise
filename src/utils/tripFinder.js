@@ -25,17 +25,18 @@ async function searchDestination({ originAirport, destName, budget, dateWindows,
     destAirport = await resolveAirport(destName);
   } catch (err) {
     console.warn(`Could not resolve destination "${destName}":`, err.message);
-    return [];
+    return { results: [], minCostSeen: null };
   }
 
   try {
     hotelDest = await resolveHotelDestination(destAirport.cityName);
   } catch (err) {
     console.warn(`Could not resolve hotel destination for "${destName}":`, err.message);
-    return [];
+    return { results: [], minCostSeen: null };
   }
 
-  const results = [];
+  const results    = [];
+  let   minCostSeen = null;
 
   for (let i = 0; i < dateWindows.length; i++) {
     const dates = dateWindows[i];
@@ -52,14 +53,22 @@ async function searchDestination({ originAirport, destName, budget, dateWindows,
       const cheapestFlight = getCheapestFlight(offers);
       if (!cheapestFlight) continue;
 
-      const flightBudget = budget - cheapestFlight.price;
-      if (flightBudget <= 0) continue;
-
       const hotels = await searchHotels({
         entityId:     hotelDest.entityId,
         checkinDate:  dates.departure,
         checkoutDate: dates.return,
       });
+
+      if (hotels.length === 0) continue;
+
+      // Track cheapest possible trip for this route regardless of budget
+      const cheapestPossible = cheapestFlight.price + hotels[0].totalPrice;
+      if (minCostSeen === null || cheapestPossible < minCostSeen) {
+        minCostSeen = cheapestPossible;
+      }
+
+      const flightBudget     = budget - cheapestFlight.price;
+      if (flightBudget <= 0) continue;
 
       const affordableHotels = hotels.filter(h => h.totalPrice <= flightBudget);
       if (affordableHotels.length === 0) continue;
@@ -90,7 +99,7 @@ async function searchDestination({ originAirport, destName, budget, dateWindows,
     }
   }
 
-  return results;
+  return { results, minCostSeen };
 }
 
 export async function findTrips(
@@ -119,18 +128,21 @@ export async function findTrips(
   }
 
   const hasDestination = destination && destination.trim() !== '';
-  let allResults = [];
+  let   allResults     = [];
+  let   globalMinCost  = null;
 
   if (hasDestination) {
     onProgress(`Searching flights to ${destination.trim()}…`);
-    allResults = await searchDestination({
+    const { results, minCostSeen } = await searchDestination({
       originAirport,
       destName:    destination.trim(),
       budget,
       dateWindows,
       onProgress,
-      tag:         destination.trim(),
+      tag: destination.trim(),
     });
+    allResults    = results;
+    globalMinCost = minCostSeen;
   } else {
     const originCity   = originAirport.cityName.toLowerCase();
     const destinations = POPULAR_DESTINATIONS.filter(
@@ -140,17 +152,19 @@ export async function findTrips(
     for (let d = 0; d < destinations.length; d++) {
       const destName = destinations[d];
       onProgress(`Exploring ${destName}… (${d + 1}/${destinations.length})`);
-      const trips = await searchDestination({
-        originAirport,
-        destName,
-        budget,
-        dateWindows: dateWindows.slice(0, 2),
-        onProgress,
-        tag: destName,
+      const { results, minCostSeen } = await searchDestination({
+        originAirport, destName, budget,
+        dateWindows: dateWindows.slice(0, 2), onProgress, tag: destName,
       });
-      allResults = [...allResults, ...trips];
+      allResults = [...allResults, ...results];
+      if (minCostSeen !== null && (globalMinCost === null || minCostSeen < globalMinCost)) {
+        globalMinCost = minCostSeen;
+      }
     }
   }
 
-  return allResults.sort((a, b) => a.totalCost - b.totalCost);
+  return {
+    trips:         allResults.sort((a, b) => a.totalCost - b.totalCost),
+    minCostFound:  globalMinCost,
+  };
 }

@@ -62,7 +62,7 @@ export default function Confetti({ onDone }) {
         animId = requestAnimationFrame(animate);
       } else if (!finished) {
         finished = true;
-        onDone?.();
+        if (onDone) onDone();
       }
     }
     animate();
